@@ -1,0 +1,60 @@
+[project]
+name = "ev-price-tracker-scraper"
+version = "0.0.1"
+description = "EV Price Tracker scraper to run at a daily frequency"
+authors = [
+    { name = "Issac Loo", email = "issaloo@umich.edu" },
+]
+
+requires-python = ">=3.11,<3.12"
+license = { text = "All Rights Reserved" }
+dependencies = [
+    "psycopg2>=2.9.9",
+    "google-cloud>=0.34.0",
+    "google-cloud-secret-manager>=2.16.4",
+    "python-dotenv>=1.0.0",
+    "python-dateutil>=2.8.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "cookiecutter>=2.1.1",
+    "pytest>=7.3.1",
+    "commitizen>=3.6.0",
+    "pre-commit>=3.3.3",
+    "gitlint>=0.19.1",
+    "scalene>=1.5.26",
+    "pandera>=0.16.0"
+]
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.ruff]
+select = [
+    "B",   # flake8-bugbear
+    "C",   # mccabe complexity
+    "E",   # Error
+    "F",   # pyflakes
+    "W",   # Warnings
+    "I",   # isort
+    "PD",  # pandas-vet https://beta.ruff.rs/docs/rules/#pandas-vet-pd
+    "D",   # pydocstyle https://beta.ruff.rs/docs/rules/#pydocstyle-d
+]
+ignore = [
+    "B008", # function-call-in-default-argument
+    "B905", # zip-without-explicit-strict
+    "C901", # complex-structure
+    "D100", # undocumented-public-module
+    "D104", # undocumented-public-package
+    "D205", # blank-line-after-summary
+    "D211", # blank-line-before-class
+    "D212", # multi-line-summary-first-line
+    "D213", # multi-line-summary-second-line
+    "D417", # undocumented-param
+    "E501", # line-too-long (handled by black)
+]
+
+[tool.black]
+line-length = 120
