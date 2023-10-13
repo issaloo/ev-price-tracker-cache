@@ -1,7 +1,7 @@
 [project]
-name = "ev-price-tracker-scraper"
+name = "ev-price-tracker-cache"
 version = "0.0.1"
-description = "EV Price Tracker scraper to run at a daily frequency"
+description = "EV Price Tracker caching to run at a daily frequency"
 authors = [
     { name = "Issac Loo", email = "issaloo@umich.edu" },
 ]
