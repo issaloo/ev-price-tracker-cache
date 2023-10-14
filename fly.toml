@@ -1,0 +1,28 @@
+# fly.toml app configuration file generated for evpricetrackercache on 2023-10-13T22:28:27-04:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = "evpricetrackercache"
+primary_region = "ord"
+
+[build]
+  image = "flyio/redis:6.2.6"
+
+[[mounts]]
+  source = "redis_server"
+  destination = "/data"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 6379
+  auto_start_machines = false
+
+  [[services.ports]]
+    handlers = ["tls"]
+    port = 6379
+  [services.concurrency]
+    hard_limit = 100
+    soft_limit = 100
+    type = "connections"
+

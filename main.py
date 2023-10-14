@@ -15,7 +15,7 @@ DB_DATABASE = os.getenv("DB_DATABASE")
 DB_PORT = os.getenv("DB_PORT")
 DB_PRICE_TABLE = os.getenv("DB_PRICE_TABLE")
 CACHE_HOSTNAME = os.getenv("CACHE_HOSTNAME")
-CACHE_USERNAME = os.getenv("CACHE_USERNAME")
+CACHE_PORT = os.getenv("CACHE_PORT")
 
 # Using GCF & SM, access secret through mounting as volume
 # secret_location = "/postgres/secret"
@@ -45,15 +45,7 @@ secret_payload = ""
 
 # Establish a connection Redis
 try:
-    # cache = redis.Redis(host=CACHE_HOSTNAME,
-    #                     username=CACHE_USERNAME,
-    #                     password=secret_payload,
-    #                     # decode_responses=True,
-    #                     # ssl=True,
-    #                     port=6379)
-    cache = redis.Redis(
-        host="localhost", port=16379, username=CACHE_USERNAME, password=secret_payload, decode_responses=True
-    )
+    cache = redis.Redis(host=CACHE_HOSTNAME, password=secret_payload, decode_responses=True, port=CACHE_PORT)
     print(cache.ping())
 except Exception as e:
     print(f"Error connecting to the cache: {e}")
@@ -62,48 +54,7 @@ except Exception as e:
 def function(event, context):
     """Cloud Function entry point function."""
 
-    def read_sql_file(query_file_path: str, params: dict | None = None):
-        """Read sql from file path.
-
-        Args:
-        ----
-            query_file_path (str): path to query file
-        Returns:
-            str: query string
-        """
-        with open(query_file_path, "r") as f:
-            query = f.read()
-        if params:
-            for key, value in params.items():
-                query = query.replace(f"$${key}$$", str(value))
-        return query
-
-    count_query = read_sql_file(
-        query_file_path="sql/get_current_record_count.sql", params={"DB_PRICE_TABLE": DB_PRICE_TABLE}
-    )
-    cursor.execute(count_query)
-    new_record_count = cursor.fetchone()[0]
-    curr_record_count = cache.set("ev_price_count", new_record_count)
-    curr_record_count = int(cache.get("ev_price_count"))
-    print(curr_record_count)
-    if new_record_count > curr_record_count:
-        # TODO: replace current record count in Redis
-
-        car_query = read_sql_file(
-            query_file_path="sql/get_all_brand_model.sql", params={"DB_PRICE_TABLE": DB_PRICE_TABLE}
-        )
-        cursor.execute(car_query)
-        brand_model_list = cursor.fetchall()
-        # Use this for dynamic placing of front end?
-        # Store in redis for use
-
-        for brand_name, model_name in brand_model_list:
-            calc_query = read_sql_file(
-                query_file_path="sql/calculate_last_price_change.sql",
-                params={"BRAND_NAME": brand_name, "MODEL_NAME": model_name},
-            )
-            cursor.execute(calc_query)
-            # Update redis key-val
+    # TODO: insert main here + read sql
 
 
 def read_sql_file(query_file_path: str, params: dict | None = None):
