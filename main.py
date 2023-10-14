@@ -17,6 +17,8 @@ DB_PRICE_TABLE = os.getenv("DB_PRICE_TABLE")
 CACHE_HOSTNAME = os.getenv("CACHE_HOSTNAME")
 CACHE_PORT = os.getenv("CACHE_PORT")
 
+CACHE_USERNAME = os.getenv("CACHE_USERNAME")
+
 # Using GCF & SM, access secret through mounting as volume
 # secret_location = "/postgres/secret"
 # with open(secret_location) as f:
@@ -45,8 +47,7 @@ secret_payload = ""
 
 # Establish a connection Redis
 try:
-    cache = redis.Redis(host=CACHE_HOSTNAME, password=secret_payload, decode_responses=True, port=CACHE_PORT)
-    print(cache.ping())
+    cache = redis.Redis(host=CACHE_HOSTNAME, port=CACHE_PORT, password=secret_payload, decode_responses=True)
 except Exception as e:
     print(f"Error connecting to the cache: {e}")
 
@@ -81,7 +82,7 @@ if __name__ == "__main__":
     cursor.execute(count_query)
     new_record_count = int(cursor.fetchone()[0])
     curr_record_count = int(cache.get("ev_price_count"))
-    # if new_record_count > curr_record_count:
+    # # if new_record_count > curr_record_count:
     if new_record_count == curr_record_count:  # TODO: remove this
         # set ev price count to new count
         cache.set("ev_price_count", new_record_count)

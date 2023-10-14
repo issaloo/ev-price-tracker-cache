@@ -6,6 +6,9 @@
 app = "evpricetrackercache"
 primary_region = "ord"
 
+[env]
+  PRIMARY_REGION = "ord"
+
 [build]
   image = "flyio/redis:6.2.6"
 
@@ -19,10 +22,12 @@ primary_region = "ord"
   auto_start_machines = false
 
   [[services.ports]]
-    handlers = ["tls"]
     port = 6379
   [services.concurrency]
+    type = "connections"
     hard_limit = 100
     soft_limit = 100
-    type = "connections"
 
+[metrics]
+  port = 9091
+  path = "/metrics"
