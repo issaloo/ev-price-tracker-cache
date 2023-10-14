@@ -1,17 +1,21 @@
 # EV Price Tracker - Cache
 
 ## Overview
-This repo contains code to query a PostgreSQL database and updating Redis to accelerate backend performance. 
+This repo contains code to query a PostgreSQL DB and updating Redis to accelerate backend performance. 
 The code is triggered to run daily for regular updates.
 
 ## Technologies
-- Cloud Function
+- Secret Manager (GCP)
+   - Store secrets
+- Cloud Source Repositories (GCP)
+   - Mirroring this repository for cloud function
+- Cloud Function (GCP)
    - Execute code using serverless compute
-- Cloud Scheduler
+- Cloud Scheduler (GCP)
    - Schedule execution of code
-- Redis
+- Redis (External)
    - Short term data retention for serving to backend
-- PostgreSQL
+- PostgreSQL (External)
    - Long term data retention for historical data
 
 ## Contributing

@@ -1,0 +1,5 @@
+psycopg2==2.9.9
+google-cloud==0.34.0
+google-cloud-secret-manager==2.16.4
+python-dotenv==1.0.0
+python-dateutil==2.8.2

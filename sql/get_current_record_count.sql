@@ -1,0 +1,4 @@
+SELECT
+    COUNT(*)
+FROM
+    $$DB_PRICE_TABLE$$;
