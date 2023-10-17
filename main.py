@@ -17,8 +17,6 @@ DB_PRICE_TABLE = os.getenv("DB_PRICE_TABLE")
 CACHE_HOSTNAME = os.getenv("CACHE_HOSTNAME")
 CACHE_PORT = os.getenv("CACHE_PORT")
 
-CACHE_USERNAME = os.getenv("CACHE_USERNAME")
-
 # Using GCF & SM, access secret through mounting as volume
 # secret_location = "/postgres/secret"
 # with open(secret_location) as f:
@@ -45,7 +43,7 @@ except Exception as e:
 #     secret_payload = f.readlines()[0]
 secret_payload = ""
 
-# Establish a connection Redis
+# Establish connection Redis
 try:
     cache = redis.Redis(host=CACHE_HOSTNAME, port=CACHE_PORT, password=secret_payload, decode_responses=True)
 except Exception as e:
