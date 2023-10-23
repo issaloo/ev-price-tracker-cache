@@ -84,26 +84,21 @@ if __name__ == "__main__":
         # set ev price count to new count
         cache.set("ev_price_count", new_record_count)
 
-        # # if new brand model, then update current brand model json
-        # car_query = read_sql_file(
-        #     query_file_path="sql/get_all_brand_model.sql", params={"DB_PRICE_TABLE": DB_PRICE_TABLE}
-        # )
-        # cursor.execute(car_query)
-        # brand_model_list = cursor.fetchall()
-        # brand_model_list = list(map(list, brand_model_list))
-        # new_brand_model_json = json.dumps(brand_model_list)
-        # curr_brand_model_json = json.loads(cache.get("brand_model_json"))
-        # if new_brand_model_json != curr_brand_model_json:
-        #     curr_brand_model_json = cache.set("brand_model_json", new_brand_model_json)
-        # print(new_brand_model_json)
-
         # get last two prices for each brand model
         calc_query = read_sql_file(
             query_file_path="sql/get_two_most_recent_msrp.sql", params={"DB_PRICE_TABLE": DB_PRICE_TABLE}
         )
         cursor.execute(calc_query)
         new_msrp = cursor.fetchall()
-        new_msrp = pd.DataFrame(new_msrp, columns=["brand_name", "model_name", "msrp", "rank"])
+        new_msrp_cols = ["brand_name", "model_name", "msrp", "rank", "car_type", "image_src", "model_url"]
+        new_msrp = pd.DataFrame(new_msrp, columns=new_msrp_cols)
+
+        # filter to attributes of most recent data
+        mask = new_msrp["rank"] == 1
+        attribute_cols = ["brand_name", "model_name", "car_type", "image_src", "model_url"]
+        new_msrp = new_msrp.loc[mask, attribute_cols].reset_index(drop=True)
+
+        # pivot to brand model to get previous and current prices
         new_msrp_pivot = (
             pd.pivot_table(data=new_msrp, index=["brand_name", "model_name"], columns=["rank"], values="msrp")
             .reset_index()
@@ -111,7 +106,7 @@ if __name__ == "__main__":
         )
         new_msrp_pivot = new_msrp_pivot.rename(columns={1: "current_price", 2: "previous_price"})
 
-        # update column name from snake case to camel case
+        # update column names from snake case to camel case
         new_col = []
         for col in new_msrp_pivot.columns:
             sub_col = col.split("_")
@@ -133,3 +128,11 @@ if __name__ == "__main__":
             ev_price_json.append(brand_dict)
         ev_price_json = json.dumps(ev_price_json)
         cache.set("ev_price_json", ev_price_json)
+
+        # get last year of data
+
+        # create graph data for each model
+        # turn into list of data point dictionaries
+        # use Nivo and match data format
+        cursor.close()
+        connection.close()

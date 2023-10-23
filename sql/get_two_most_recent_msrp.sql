@@ -3,6 +3,9 @@ WITH rank_msrp AS (
         brand_name,
         model_name,
         msrp,
+        car_type,
+        image_src,
+        model_url,
         ROW_NUMBER() OVER (PARTITION BY brand_name, model_name ORDER BY create_timestamp DESC) as rank
     FROM
         $$DB_PRICE_TABLE$$)
