@@ -1,7 +1,6 @@
 import json
 import os
 
-import numpy as np
 import pandas as pd
 import psycopg2
 import redis
@@ -85,32 +84,52 @@ if __name__ == "__main__":
         # set ev price count to new count
         cache.set("ev_price_count", new_record_count)
 
-        # if new brand model, then update current brand model json
-        car_query = read_sql_file(
-            query_file_path="sql/get_all_brand_model.sql", params={"DB_PRICE_TABLE": DB_PRICE_TABLE}
-        )
-        cursor.execute(car_query)
-        brand_model_list = cursor.fetchall()
-        brand_model_list = list(map(list, brand_model_list))
-        new_brand_model_json = json.dumps(brand_model_list)
-        curr_brand_model_json = json.loads(cache.get("brand_model_json"))
-        if new_brand_model_json != curr_brand_model_json:
-            curr_brand_model_json = cache.set("brand_model_json", new_brand_model_json)
+        # # if new brand model, then update current brand model json
+        # car_query = read_sql_file(
+        #     query_file_path="sql/get_all_brand_model.sql", params={"DB_PRICE_TABLE": DB_PRICE_TABLE}
+        # )
+        # cursor.execute(car_query)
+        # brand_model_list = cursor.fetchall()
+        # brand_model_list = list(map(list, brand_model_list))
+        # new_brand_model_json = json.dumps(brand_model_list)
+        # curr_brand_model_json = json.loads(cache.get("brand_model_json"))
+        # if new_brand_model_json != curr_brand_model_json:
+        #     curr_brand_model_json = cache.set("brand_model_json", new_brand_model_json)
+        # print(new_brand_model_json)
 
-        # calculate last price change
+        # get last two prices for each brand model
         calc_query = read_sql_file(
             query_file_path="sql/get_two_most_recent_msrp.sql", params={"DB_PRICE_TABLE": DB_PRICE_TABLE}
         )
         cursor.execute(calc_query)
         new_msrp = cursor.fetchall()
         new_msrp = pd.DataFrame(new_msrp, columns=["brand_name", "model_name", "msrp", "rank"])
-        new_msrp_pivot = pd.pivot_table(
-            data=new_msrp, index=["brand_name", "model_name"], columns=["rank"], values="msrp"
-        ).reset_index()
-        new_msrp_pivot["msrp_change"] = new_msrp_pivot[1] - new_msrp_pivot[2]
-        new_msrp_pivot["msrp_change_pct"] = np.around(
-            ((new_msrp_pivot["msrp_change"] / new_msrp_pivot[2]) * 100), decimals=2
+        new_msrp_pivot = (
+            pd.pivot_table(data=new_msrp, index=["brand_name", "model_name"], columns=["rank"], values="msrp")
+            .reset_index()
+            .fillna("none")
         )
-        new_msrp_pivot = new_msrp_pivot[["brand_name", "model_name", "msrp_change", "msrp_change_pct"]]
-        print(new_msrp_pivot)
-        # TODO: set compound key in redis... maybe look into how to get brand_name.model_name.msrp_change as key
+        new_msrp_pivot = new_msrp_pivot.rename(columns={1: "current_price", 2: "previous_price"})
+
+        # update column name from snake case to camel case
+        new_col = []
+        for col in new_msrp_pivot.columns:
+            sub_col = col.split("_")
+            if len(sub_col) > 1:
+                sub_col[1:] = [col.capitalize() for col in sub_col[1:]]
+            new_col.append("".join(sub_col))
+        new_msrp_pivot.columns = new_col
+
+        # create ev price json
+        ev_price_json = []
+        for brand_name in new_msrp_pivot["brandName"].unique():
+            brand_dict = {"brandName": brand_name}
+            mask = new_msrp_pivot["brandName"] == brand_name
+            sub_brand = new_msrp_pivot.loc[mask].reset_index(drop=True)
+            sub_brand_cols = list(sub_brand.columns)
+            sub_brand_cols.remove("brandName")
+            sub_brand = sub_brand[sub_brand_cols]
+            brand_dict["itemDetails"] = sub_brand.to_dict("records")
+            ev_price_json.append(brand_dict)
+        ev_price_json = json.dumps(ev_price_json)
+        cache.set("ev_price_json", ev_price_json)
