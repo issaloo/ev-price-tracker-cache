@@ -49,7 +49,7 @@ except Exception as e:
     print(f"Error connecting to the cache: {e}")
 
 
-def function(event, context):
+def run_ev_price_cache(event, context):
     """Cloud Function entry point function."""
 
     def read_sql_file(query_file_path: str, params: dict | None = None):
@@ -170,3 +170,4 @@ def function(event, context):
 
         cursor.close()
         connection.close()
+        return "ok"
