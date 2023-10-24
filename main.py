@@ -19,10 +19,9 @@ CACHE_HOSTNAME = os.getenv("CACHE_HOSTNAME")
 CACHE_PORT = os.getenv("CACHE_PORT")
 
 # Using GCF & SM, access secret through mounting as volume
-# secret_location = "/postgres/secret"
-# with open(secret_location) as f:
-#     secret_payload = f.readlines()[0]
-secret_payload = ""
+secret_location = "/postgres/secret"
+with open(secret_location) as f:
+    secret_payload = f.readlines()[0]
 
 # Establish a connection to the PostgreSQL DB
 try:
@@ -39,10 +38,9 @@ except Exception as e:
     print(f"Error connecting to the database: {e}")
 
 # Using GCF & SM, access secret through mounting as volume
-# secret_location = "/redis/secret"
-# with open(secret_location) as f:
-#     secret_payload = f.readlines()[0]
-secret_payload = ""
+secret_location = "/redis/secret"
+with open(secret_location) as f:
+    secret_payload = f.readlines()[0]
 
 # Establish connection Redis
 try:
@@ -54,27 +52,22 @@ except Exception as e:
 def function(event, context):
     """Cloud Function entry point function."""
 
-    # TODO: insert main here + read sql
+    def read_sql_file(query_file_path: str, params: dict | None = None):
+        """Read sql from file path.
 
+        Args:
+        ----
+            query_file_path (str): path to query file
+        Returns:
+            str: query string
+        """
+        with open(query_file_path, "r") as f:
+            query = f.read()
+        if params:
+            for key, value in params.items():
+                query = query.replace(f"$${key}$$", str(value))
+        return query
 
-def read_sql_file(query_file_path: str, params: dict | None = None):
-    """Read sql from file path.
-
-    Args:
-    ----
-        query_file_path (str): path to query file
-    Returns:
-        str: query string
-    """
-    with open(query_file_path, "r") as f:
-        query = f.read()
-    if params:
-        for key, value in params.items():
-            query = query.replace(f"$${key}$$", str(value))
-    return query
-
-
-if __name__ == "__main__":
     count_query = read_sql_file(
         query_file_path="sql/get_current_record_count.sql", params={"DB_PRICE_TABLE": DB_PRICE_TABLE}
     )
@@ -98,7 +91,7 @@ if __name__ == "__main__":
         # filter to attributes of most recent data
         mask = new_msrp["rank"] == 1
         attribute_cols = ["brand_name", "model_name", "car_type", "image_src", "model_url"]
-        recent_attributes = new_msrp.loc[mask, attribute_cols].reset_index(drop=True)
+        new_msrp.loc[mask, attribute_cols].reset_index(drop=True)
 
         # pivot to brand model to get previous and current prices
         new_msrp_pivot = (
