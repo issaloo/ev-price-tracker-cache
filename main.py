@@ -166,7 +166,7 @@ def function(event, context):
             graph_data["create_timestamp"] = pd.to_datetime(graph_data["create_timestamp"]).dt.strftime("%Y-%m-%d")
             graph_data = graph_data.rename(columns={"create_timestamp": "date", "msrp": "price"})
             model_data_json = json.dumps(graph_data.to_dict("records"))
-            cache.set(f"graph_{brand_name}_{model_name}", model_data_json)
+            cache.set(f"graph_{brand_name}_{model_name.replace(' ', '_')}", model_data_json)
 
         cursor.close()
         connection.close()
