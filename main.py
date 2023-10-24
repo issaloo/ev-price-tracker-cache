@@ -74,8 +74,7 @@ def function(event, context):
     cursor.execute(count_query)
     new_record_count = int(cursor.fetchone()[0])
     curr_record_count = int(cache.get("ev_price_count"))
-    # # if new_record_count > curr_record_count:
-    if new_record_count == curr_record_count:  # TODO: remove this
+    if new_record_count > curr_record_count:
         # set ev price count to new count
         cache.set("ev_price_count", new_record_count)
 
