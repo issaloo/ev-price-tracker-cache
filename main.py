@@ -163,7 +163,7 @@ if __name__ == "__main__":
             graph_data_copy["date_diff"] = (
                 pd.to_datetime(graph_data_copy["create_timestamp"]) - pd.to_datetime(graph_data_copy["last_timestamp"])
             ).dt.days
-            for _index, row in graph_data_copy.iterrows():
+            for _, row in graph_data_copy.iterrows():
                 if (row["date_diff"] > 1) & (row["msrp_diff"] != 0) & pd.notna(row["msrp_diff"]):
                     graph_data.loc[len(graph_data), ["msrp", "create_timestamp"]] = [
                         row["last_msrp"],
