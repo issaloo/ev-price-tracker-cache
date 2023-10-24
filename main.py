@@ -1,9 +1,11 @@
 import json
 import os
+from datetime import date
 
 import pandas as pd
 import psycopg2
 import redis
+from dateutil.relativedelta import relativedelta
 from dotenv import load_dotenv
 
 # Using .env, load DB variables
@@ -96,7 +98,7 @@ if __name__ == "__main__":
         # filter to attributes of most recent data
         mask = new_msrp["rank"] == 1
         attribute_cols = ["brand_name", "model_name", "car_type", "image_src", "model_url"]
-        new_msrp = new_msrp.loc[mask, attribute_cols].reset_index(drop=True)
+        recent_attributes = new_msrp.loc[mask, attribute_cols].reset_index(drop=True)
 
         # pivot to brand model to get previous and current prices
         new_msrp_pivot = (
@@ -115,7 +117,7 @@ if __name__ == "__main__":
             new_col.append("".join(sub_col))
         new_msrp_pivot.columns = new_col
 
-        # create ev price json
+        # create ev price json and store in redis
         ev_price_json = []
         for brand_name in new_msrp_pivot["brandName"].unique():
             brand_dict = {"brandName": brand_name}
@@ -130,9 +132,49 @@ if __name__ == "__main__":
         cache.set("ev_price_json", ev_price_json)
 
         # get last year of data
+        brand_model_list = new_msrp[["brand_name", "model_name"]].drop_duplicates().to_numpy().tolist()
+        for brand_name, model_name in brand_model_list:
+            graph_query = read_sql_file(
+                query_file_path="sql/get_last_year_model_data.sql",
+                params={"DB_PRICE_TABLE": DB_PRICE_TABLE, "brand_name": brand_name, "model_name": model_name},
+            )
+            cursor.execute(graph_query)
+            graph_data = cursor.fetchall()
+            graph_data = pd.DataFrame(graph_data, columns=["msrp", "create_timestamp"])
+            graph_data["create_timestamp"] = pd.to_datetime(graph_data["create_timestamp"]).dt.date
+            graph_data = graph_data.sort_values(by="create_timestamp", ascending=False)
 
-        # create graph data for each model
-        # turn into list of data point dictionaries
-        # use Nivo and match data format
+            # fill in current and last year data points
+            max_id = graph_data["create_timestamp"].idxmax()
+            max_date_msrp, max_date = graph_data.loc[max_id].to_numpy()
+            if max_date != date.today():
+                graph_data.loc[len(graph_data), ["msrp", "create_timestamp"]] = [max_date_msrp, date.today()]
+            min_id = graph_data["create_timestamp"].idxmin()
+            min_date_msrp, min_date = graph_data.loc[min_id].to_numpy()
+            last_year = date.today() - relativedelta(days=365)
+            if min_date != last_year:
+                graph_data.loc[len(graph_data), ["msrp", "create_timestamp"]] = [min_date_msrp, last_year]
+
+            # fill in gaps in graph data
+            graph_data = graph_data.sort_values(by="create_timestamp", ascending=False).reset_index(drop=True)
+            graph_data_copy = graph_data.copy()
+            graph_data_copy[["last_msrp", "last_timestamp"]] = graph_data_copy[["msrp", "create_timestamp"]].shift(-1)
+            graph_data_copy["msrp_diff"] = graph_data_copy["msrp"] - graph_data_copy["last_msrp"]
+            graph_data_copy["date_diff"] = (
+                pd.to_datetime(graph_data_copy["create_timestamp"]) - pd.to_datetime(graph_data_copy["last_timestamp"])
+            ).dt.days
+            for _index, row in graph_data_copy.iterrows():
+                if (row["date_diff"] > 1) & (row["msrp_diff"] != 0) & pd.notna(row["msrp_diff"]):
+                    graph_data.loc[len(graph_data), ["msrp", "create_timestamp"]] = [
+                        row["last_msrp"],
+                        row["create_timestamp"] - relativedelta(days=1),
+                    ]
+
+            # create model data json and store in redis
+            graph_data["create_timestamp"] = pd.to_datetime(graph_data["create_timestamp"]).dt.strftime("%Y-%m-%d")
+            graph_data = graph_data.rename(columns={"create_timestamp": "date", "msrp": "price"})
+            model_data_json = json.dumps(graph_data.to_dict("records"))
+            cache.set(f"graph_{brand_name}_{model_name}", model_data_json)
+
         cursor.close()
         connection.close()
