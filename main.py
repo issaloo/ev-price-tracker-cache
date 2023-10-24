@@ -8,46 +8,6 @@ import redis
 from dateutil.relativedelta import relativedelta
 from dotenv import load_dotenv
 
-# Using .env, load DB variables
-load_dotenv()
-DB_HOSTNAME = os.getenv("DB_HOSTNAME")
-DB_USERNAME = os.getenv("DB_USERNAME")
-DB_DATABASE = os.getenv("DB_DATABASE")
-DB_PORT = os.getenv("DB_PORT")
-DB_PRICE_TABLE = os.getenv("DB_PRICE_TABLE")
-CACHE_HOSTNAME = os.getenv("CACHE_HOSTNAME")
-CACHE_PORT = os.getenv("CACHE_PORT")
-
-# Using GCF & SM, access secret through mounting as volume
-secret_location = "/postgres/secret"
-with open(secret_location) as f:
-    secret_payload = f.readlines()[0]
-
-# Establish a connection to the PostgreSQL DB
-try:
-    connection = psycopg2.connect(
-        host=DB_HOSTNAME,
-        user=DB_USERNAME,
-        password=secret_payload,
-        dbname=DB_DATABASE,
-        port=DB_PORT,
-    )
-    connection.autocommit = True
-    cursor = connection.cursor()
-except Exception as e:
-    print(f"Error connecting to the database: {e}")
-
-# Using GCF & SM, access secret through mounting as volume
-secret_location = "/redis/secret"
-with open(secret_location) as f:
-    secret_payload = f.readlines()[0]
-
-# Establish connection Redis
-try:
-    cache = redis.Redis(host=CACHE_HOSTNAME, port=CACHE_PORT, password=secret_payload, decode_responses=True)
-except Exception as e:
-    print(f"Error connecting to the cache: {e}")
-
 
 def run_ev_price_cache(event, context):
     """Cloud Function entry point function."""
@@ -67,6 +27,46 @@ def run_ev_price_cache(event, context):
             for key, value in params.items():
                 query = query.replace(f"$${key}$$", str(value))
         return query
+
+    # Using .env, load DB variables
+    load_dotenv()
+    DB_HOSTNAME = os.getenv("DB_HOSTNAME")
+    DB_USERNAME = os.getenv("DB_USERNAME")
+    DB_DATABASE = os.getenv("DB_DATABASE")
+    DB_PORT = os.getenv("DB_PORT")
+    DB_PRICE_TABLE = os.getenv("DB_PRICE_TABLE")
+    CACHE_HOSTNAME = os.getenv("CACHE_HOSTNAME")
+    CACHE_PORT = os.getenv("CACHE_PORT")
+
+    # Using GCF & SM, access secret through mounting as volume
+    secret_location = "/postgres/secret"
+    with open(secret_location) as f:
+        secret_payload = f.readlines()[0]
+
+    # Establish a connection to the PostgreSQL DB
+    try:
+        connection = psycopg2.connect(
+            host=DB_HOSTNAME,
+            user=DB_USERNAME,
+            password=secret_payload,
+            dbname=DB_DATABASE,
+            port=DB_PORT,
+        )
+        connection.autocommit = True
+        cursor = connection.cursor()
+    except Exception as e:
+        print(f"Error connecting to the database: {e}")
+
+    # Using GCF & SM, access secret through mounting as volume
+    secret_location = "/redis/secret"
+    with open(secret_location) as f:
+        secret_payload = f.readlines()[0]
+
+    # Establish connection Redis
+    try:
+        cache = redis.Redis(host=CACHE_HOSTNAME, port=CACHE_PORT, password=secret_payload, decode_responses=True)
+    except Exception as e:
+        print(f"Error connecting to the cache: {e}")
 
     count_query = read_sql_file(
         query_file_path="sql/get_current_record_count.sql", params={"DB_PRICE_TABLE": DB_PRICE_TABLE}
