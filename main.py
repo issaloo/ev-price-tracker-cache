@@ -84,41 +84,44 @@ def run_ev_price_cache(event, context):
         )
         cursor.execute(calc_query)
         new_msrp = cursor.fetchall()
-        new_msrp_cols = ["brand_name", "model_name", "msrp", "rank", "car_type", "image_src", "model_url"]
+        new_msrp_cols = ["brand_name", "model_name", "msrp", "car_type", "image_src", "model_url", "rank"]
         new_msrp = pd.DataFrame(new_msrp, columns=new_msrp_cols)
 
         # filter to attributes of most recent data
         mask = new_msrp["rank"] == 1
         attribute_cols = ["brand_name", "model_name", "car_type", "image_src", "model_url"]
-        new_msrp.loc[mask, attribute_cols].reset_index(drop=True)
+        attr_df = new_msrp.loc[mask, attribute_cols].reset_index(drop=True)
 
         # pivot to brand model to get previous and current prices
         new_msrp_pivot = (
-            pd.pivot_table(data=new_msrp, index=["brand_name", "model_name"], columns=["rank"], values="msrp")
+            pd.pivot_table(
+                data=new_msrp, index=["brand_name", "model_name"], columns="rank", values="msrp", aggfunc="sum"
+            )
             .reset_index()
             .fillna("none")
         )
         new_msrp_pivot = new_msrp_pivot.rename(columns={1: "current_price", 2: "previous_price"})
+        attr_df = attr_df.merge(new_msrp_pivot, on=["brand_name", "model_name"], how="left")
 
         # update column names from snake case to camel case
         new_col = []
-        for col in new_msrp_pivot.columns:
+        for col in attr_df.columns:
             sub_col = col.split("_")
             if len(sub_col) > 1:
                 sub_col[1:] = [col.capitalize() for col in sub_col[1:]]
             new_col.append("".join(sub_col))
-        new_msrp_pivot.columns = new_col
+        attr_df.columns = new_col
 
         # create ev price json and store in redis
         ev_price_json = []
-        for brand_name in new_msrp_pivot["brandName"].unique():
+        for brand_name in attr_df["brandName"].unique():
             brand_dict = {"brandName": brand_name}
-            mask = new_msrp_pivot["brandName"] == brand_name
-            sub_brand = new_msrp_pivot.loc[mask].reset_index(drop=True)
-            sub_brand_cols = list(sub_brand.columns)
-            sub_brand_cols.remove("brandName")
-            sub_brand = sub_brand[sub_brand_cols]
-            brand_dict["itemDetails"] = sub_brand.to_dict("records")
+            mask = attr_df["brandName"] == brand_name
+            sub_attr = attr_df.loc[mask].reset_index(drop=True)
+            sub_attr_cols = list(sub_attr.columns)
+            sub_attr_cols.remove("brandName")
+            sub_attr = sub_attr[sub_attr_cols]
+            brand_dict["itemDetails"] = sub_attr.to_dict("records")
             ev_price_json.append(brand_dict)
         ev_price_json = json.dumps(ev_price_json)
         cache.set("ev_price_json", ev_price_json)
