@@ -84,7 +84,7 @@ def run_ev_price_cache(event, context):
         )
         cursor.execute(calc_query)
         new_msrp = cursor.fetchall()
-        new_msrp_cols = ["brand_name", "model_name", "msrp", "rank", "car_type", "image_src", "model_url"]
+        new_msrp_cols = ["brand_name", "model_name", "msrp", "car_type", "image_src", "model_url", "rank"]
         new_msrp = pd.DataFrame(new_msrp, columns=new_msrp_cols)
 
         # filter to attributes of most recent data
