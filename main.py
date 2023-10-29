@@ -167,7 +167,7 @@ def run_ev_price_cache(event, context):
                     row["create_timestamp"] - relativedelta(days=1),
                 ]
 
-        # create model data json and store in redis
+        # create graph data json and store in redis
         graph_data["create_timestamp"] = pd.to_datetime(graph_data["create_timestamp"]).dt.strftime("%Y-%m-%d")
         graph_data = graph_data.sort_values(by="create_timestamp", ascending=True).rename(
             columns={"create_timestamp": "x", "msrp": "y"}
@@ -175,6 +175,6 @@ def run_ev_price_cache(event, context):
         model_data_json = json.dumps(graph_data.to_dict("records"))
         cache.set(f"{KEY_PREFIX}graph_{brand_name}_{model_name.replace(' ', '_')}", model_data_json)
 
-        cursor.close()
-        connection.close()
-        return "ok"
+    cursor.close()
+    connection.close()
+    return "ok"
