@@ -172,6 +172,7 @@ def run_ev_price_cache(event, context):
         graph_data = graph_data.sort_values(by=["create_timestamp"], ascending=[True]).rename(
             columns={"create_timestamp": "x", "msrp": "y"}
         )
+        graph_data = graph_data[["x", "y"]]
         model_data_json = json.dumps(graph_data.to_dict("records"))
         cache.set(f"{KEY_PREFIX}graph_{brand_name}_{model_name.replace(' ', '_')}", model_data_json)
 
