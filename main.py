@@ -75,7 +75,7 @@ def run_ev_price_cache(event, context):
     )
     cursor.execute(count_query)
     new_record_count = int(cursor.fetchone()[0])
-    curr_record_count = int(cache.get("ev_price_count"))
+    curr_record_count = int(cache.get(f"{KEY_PREFIX}ev_price_count"))
     if new_record_count > curr_record_count:
         # set ev price count to new count
         cache.set(f"{KEY_PREFIX}ev_price_count", new_record_count)
