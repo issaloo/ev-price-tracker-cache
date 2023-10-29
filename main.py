@@ -70,6 +70,16 @@ def run_ev_price_cache(event, context):
     except Exception as e:
         print(f"Error connecting to the cache: {e}")
 
+    # get last two prices for each brand model
+    calc_query = read_sql_file(
+        query_file_path="sql/get_two_most_recent_msrp.sql", params={"DB_PRICE_TABLE": DB_PRICE_TABLE}
+    )
+    cursor.execute(calc_query)
+    new_msrp = cursor.fetchall()
+    new_msrp_cols = ["brand_name", "model_name", "msrp", "car_type", "image_src", "model_url", "rank"]
+    new_msrp = pd.DataFrame(new_msrp, columns=new_msrp_cols)
+
+    # if new record has been added, update the ev price json
     count_query = read_sql_file(
         query_file_path="sql/get_current_record_count.sql", params={"DB_PRICE_TABLE": DB_PRICE_TABLE}
     )
@@ -77,17 +87,7 @@ def run_ev_price_cache(event, context):
     new_record_count = int(cursor.fetchone()[0])
     curr_record_count = int(cache.get(f"{KEY_PREFIX}ev_price_count"))
     if new_record_count > curr_record_count:
-        # set ev price count to new count
         cache.set(f"{KEY_PREFIX}ev_price_count", new_record_count)
-
-        # get last two prices for each brand model
-        calc_query = read_sql_file(
-            query_file_path="sql/get_two_most_recent_msrp.sql", params={"DB_PRICE_TABLE": DB_PRICE_TABLE}
-        )
-        cursor.execute(calc_query)
-        new_msrp = cursor.fetchall()
-        new_msrp_cols = ["brand_name", "model_name", "msrp", "car_type", "image_src", "model_url", "rank"]
-        new_msrp = pd.DataFrame(new_msrp, columns=new_msrp_cols)
 
         # filter to attributes of most recent data
         mask = new_msrp["rank"] == 1
@@ -128,7 +128,7 @@ def run_ev_price_cache(event, context):
         ev_price_json = json.dumps(ev_price_json)
         cache.set(f"{KEY_PREFIX}ev_price_json", ev_price_json)
 
-    # get last year of data
+    # for every brand model, update graph data json
     brand_model_list = new_msrp[["brand_name", "model_name"]].drop_duplicates().to_numpy().tolist()
     for brand_name, model_name in brand_model_list:
         graph_query = read_sql_file(
@@ -169,7 +169,7 @@ def run_ev_price_cache(event, context):
 
         # create graph data json and store in redis
         graph_data["create_timestamp"] = pd.to_datetime(graph_data["create_timestamp"]).dt.strftime("%Y-%m-%d")
-        graph_data = graph_data.sort_values(by="create_timestamp", ascending=True).rename(
+        graph_data = graph_data.sort_values(by=["create_timestamp"], ascending=[True]).rename(
             columns={"create_timestamp": "x", "msrp": "y"}
         )
         model_data_json = json.dumps(graph_data.to_dict("records"))
