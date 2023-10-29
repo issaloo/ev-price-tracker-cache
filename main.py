@@ -37,6 +37,8 @@ def run_ev_price_cache(event, context):
     DB_PRICE_TABLE = os.getenv("DB_PRICE_TABLE")
     CACHE_HOSTNAME = os.getenv("CACHE_HOSTNAME")
     CACHE_PORT = os.getenv("CACHE_PORT")
+    CACHE_VERSION = os.getenv("CACHE_VERSION")
+    KEY_PREFIX = f":{CACHE_VERSION}:"
 
     # Using GCF & SM, access secret through mounting as volume
     secret_location = "/postgres/secret"
@@ -76,7 +78,7 @@ def run_ev_price_cache(event, context):
     curr_record_count = int(cache.get("ev_price_count"))
     if new_record_count > curr_record_count:
         # set ev price count to new count
-        cache.set("ev_price_count", new_record_count)
+        cache.set(f"{KEY_PREFIX}ev_price_count", new_record_count)
 
         # get last two prices for each brand model
         calc_query = read_sql_file(
@@ -124,7 +126,7 @@ def run_ev_price_cache(event, context):
             brand_dict["itemDetails"] = sub_attr.to_dict("records")
             ev_price_json.append(brand_dict)
         ev_price_json = json.dumps(ev_price_json)
-        cache.set("ev_price_json", ev_price_json)
+        cache.set(f"{KEY_PREFIX}ev_price_json", ev_price_json)
 
         # get last year of data
         brand_model_list = new_msrp[["brand_name", "model_name"]].drop_duplicates().to_numpy().tolist()
@@ -169,7 +171,7 @@ def run_ev_price_cache(event, context):
             graph_data["create_timestamp"] = pd.to_datetime(graph_data["create_timestamp"]).dt.strftime("%Y-%m-%d")
             graph_data = graph_data.rename(columns={"create_timestamp": "date", "msrp": "price"})
             model_data_json = json.dumps(graph_data.to_dict("records"))
-            cache.set(f"graph_{brand_name}_{model_name.replace(' ', '_')}", model_data_json)
+            cache.set(f"{KEY_PREFIX}graph_{brand_name}_{model_name.replace(' ', '_')}", model_data_json)
 
         cursor.close()
         connection.close()
