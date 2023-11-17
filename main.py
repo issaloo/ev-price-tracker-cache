@@ -28,7 +28,9 @@ def run_ev_price_cache(event, context):
                 query = query.replace(f"$${key}$$", str(value))
         return query
 
-    # Using .env, load DB variables
+    #########################
+    # Environment Variables #
+    #########################
     load_dotenv()
     DB_HOSTNAME = os.getenv("DB_HOSTNAME")
     DB_USERNAME = os.getenv("DB_USERNAME")
@@ -39,6 +41,10 @@ def run_ev_price_cache(event, context):
     CACHE_PORT = os.getenv("CACHE_PORT")
     CACHE_VERSION = os.getenv("CACHE_VERSION")
     KEY_PREFIX = f":{CACHE_VERSION}:"
+
+    #######################
+    # PostgreSQL DataBase #
+    #######################
 
     # Using GCF & SM, access secret through mounting as volume
     secret_location = "/postgres/secret"
@@ -70,6 +76,10 @@ def run_ev_price_cache(event, context):
     except Exception as e:
         print(f"Error connecting to the cache: {e}")
 
+    #########################
+    # EV Price Landing JSON #
+    #########################
+
     # get last two prices for each brand model
     calc_query = read_sql_file(
         query_file_path="sql/get_two_most_recent_msrp.sql", params={"DB_PRICE_TABLE": DB_PRICE_TABLE}
@@ -79,54 +89,46 @@ def run_ev_price_cache(event, context):
     new_msrp_cols = ["brand_name", "model_name", "msrp", "car_type", "image_src", "model_url", "rank"]
     new_msrp = pd.DataFrame(new_msrp, columns=new_msrp_cols)
 
-    # if new record has been added, update the ev price json
-    count_query = read_sql_file(
-        query_file_path="sql/get_current_record_count.sql", params={"DB_PRICE_TABLE": DB_PRICE_TABLE}
+    # filter to attributes of most recent data
+    mask = new_msrp["rank"] == 1
+    attribute_cols = ["brand_name", "model_name", "car_type", "image_src", "model_url"]
+    attr_df = new_msrp.loc[mask, attribute_cols].reset_index(drop=True)
+
+    # pivot to brand model to get previous and current prices
+    new_msrp_pivot = (
+        pd.pivot_table(data=new_msrp, index=["brand_name", "model_name"], columns="rank", values="msrp", aggfunc="sum")
+        .reset_index()
+        .fillna("none")
     )
-    cursor.execute(count_query)
-    new_record_count = int(cursor.fetchone()[0])
-    curr_record_count = int(cache.get(f"{KEY_PREFIX}ev_price_count"))
-    if new_record_count > curr_record_count:
-        cache.set(f"{KEY_PREFIX}ev_price_count", new_record_count)
+    new_msrp_pivot = new_msrp_pivot.rename(columns={1: "current_price", 2: "previous_price"})
+    attr_df = attr_df.merge(new_msrp_pivot, on=["brand_name", "model_name"], how="left")
 
-        # filter to attributes of most recent data
-        mask = new_msrp["rank"] == 1
-        attribute_cols = ["brand_name", "model_name", "car_type", "image_src", "model_url"]
-        attr_df = new_msrp.loc[mask, attribute_cols].reset_index(drop=True)
+    # update column names from snake case to camel case
+    new_col = []
+    for col in attr_df.columns:
+        sub_col = col.split("_")
+        if len(sub_col) > 1:
+            sub_col[1:] = [col.capitalize() for col in sub_col[1:]]
+        new_col.append("".join(sub_col))
+    attr_df.columns = new_col
 
-        # pivot to brand model to get previous and current prices
-        new_msrp_pivot = (
-            pd.pivot_table(
-                data=new_msrp, index=["brand_name", "model_name"], columns="rank", values="msrp", aggfunc="sum"
-            )
-            .reset_index()
-            .fillna("none")
-        )
-        new_msrp_pivot = new_msrp_pivot.rename(columns={1: "current_price", 2: "previous_price"})
-        attr_df = attr_df.merge(new_msrp_pivot, on=["brand_name", "model_name"], how="left")
+    # create ev price json and store in redis
+    ev_price_json = []
+    for brand_name in attr_df["brandName"].unique():
+        brand_dict = {"brandName": brand_name}
+        mask = attr_df["brandName"] == brand_name
+        sub_attr = attr_df.loc[mask].reset_index(drop=True)
+        sub_attr_cols = list(sub_attr.columns)
+        sub_attr_cols.remove("brandName")
+        sub_attr = sub_attr[sub_attr_cols]
+        brand_dict["itemDetails"] = sub_attr.to_dict("records")
+        ev_price_json.append(brand_dict)
+    ev_price_json = json.dumps(ev_price_json)
+    cache.set(f"{KEY_PREFIX}ev_price_json", ev_price_json)
 
-        # update column names from snake case to camel case
-        new_col = []
-        for col in attr_df.columns:
-            sub_col = col.split("_")
-            if len(sub_col) > 1:
-                sub_col[1:] = [col.capitalize() for col in sub_col[1:]]
-            new_col.append("".join(sub_col))
-        attr_df.columns = new_col
-
-        # create ev price json and store in redis
-        ev_price_json = []
-        for brand_name in attr_df["brandName"].unique():
-            brand_dict = {"brandName": brand_name}
-            mask = attr_df["brandName"] == brand_name
-            sub_attr = attr_df.loc[mask].reset_index(drop=True)
-            sub_attr_cols = list(sub_attr.columns)
-            sub_attr_cols.remove("brandName")
-            sub_attr = sub_attr[sub_attr_cols]
-            brand_dict["itemDetails"] = sub_attr.to_dict("records")
-            ev_price_json.append(brand_dict)
-        ev_price_json = json.dumps(ev_price_json)
-        cache.set(f"{KEY_PREFIX}ev_price_json", ev_price_json)
+    ##################################
+    # EV Graph JSON for Each Vehicle #
+    ##################################
 
     # for every brand model, update graph data json
     brand_model_list = new_msrp[["brand_name", "model_name"]].drop_duplicates().to_numpy().tolist()
