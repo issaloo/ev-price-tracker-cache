@@ -86,11 +86,11 @@ def run_ev_price_cache(event, context):
     )
     cursor.execute(calc_query)
     new_msrp = cursor.fetchall()
-    new_msrp = pd.DataFrame(new_msrp, columns=["brand_name", "model_name", "msrp", "image_src", "rank"])
+    new_msrp = pd.DataFrame(new_msrp, columns=["brand_name", "model_name", "msrp", "image_src", "model_url", "rank"])
 
     # filter to attributes and pivot to brand model to get previous and current prices
     mask = new_msrp["rank"] == 1
-    attribute_cols = ["brand_name", "model_name", "image_src"]
+    attribute_cols = ["brand_name", "model_name", "image_src", "model_url"]
     attr_df = new_msrp.loc[mask, attribute_cols].reset_index(drop=True)
     new_msrp_pivot = (
         pd.pivot_table(data=new_msrp, index=["brand_name", "model_name"], columns="rank", values="msrp", aggfunc="sum")
@@ -135,7 +135,7 @@ def run_ev_price_cache(event, context):
             params={"DB_PRICE_TABLE": DB_PRICE_TABLE, "brand_name": brand_name, "model_name": model_name},
         )
         cursor.execute(max_min_query)
-        max_min_data = cursor.fetchall()
+        max_min_data = cursor.fetchall()[0]
         car_type, model_url, min_msrp, max_msrp = max_min_data
         graph_dict = {
             "brandName": brand_name,  # add brand name
@@ -157,6 +157,8 @@ def run_ev_price_cache(event, context):
         graph_dict["curPrice"] = graph_data["msrp"].iloc[0]  # add current price
         graph_dict["maxPriceYTD"] = graph_data["msrp"].max()  # add max price YTD
         graph_dict["minPriceYTD"] = graph_data["msrp"].min()  # add min price YTD
+        graph_dict["avgPriceYTD"] = graph_data["msrp"].mean()  # add average price YTD
+        graph_dict["changeYTD"] = graph_data.shape[0] - 1  # add price changes YTD
 
         # fill in current and last year data points
         max_id = graph_data["create_timestamp"].idxmax()
@@ -188,7 +190,7 @@ def run_ev_price_cache(event, context):
             columns={"create_timestamp": "x", "msrp": "y"}
         )
         graph_data = graph_data[["x", "y"]]
-        graph_dict = {"graphData": graph_data.to_dict("records")}  # add graph data
+        graph_dict["graphData"] = graph_data.to_dict("records")  # add graph data
 
         # create graph data json and store in redis
         model_data_json = json.dumps(graph_dict)

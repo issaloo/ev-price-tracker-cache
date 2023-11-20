@@ -1,6 +1,6 @@
 SELECT
     msrp,
-    create_timestamp,
+    create_timestamp
 FROM
     $$DB_PRICE_TABLE$$
 WHERE
