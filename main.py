@@ -86,15 +86,12 @@ def run_ev_price_cache(event, context):
     )
     cursor.execute(calc_query)
     new_msrp = cursor.fetchall()
-    new_msrp_cols = ["brand_name", "model_name", "msrp", "car_type", "image_src", "model_url", "rank"]
-    new_msrp = pd.DataFrame(new_msrp, columns=new_msrp_cols)
+    new_msrp = pd.DataFrame(new_msrp, columns=["brand_name", "model_name", "msrp", "image_src", "rank"])
 
-    # filter to attributes of most recent data
+    # filter to attributes and pivot to brand model to get previous and current prices
     mask = new_msrp["rank"] == 1
-    attribute_cols = ["brand_name", "model_name", "car_type", "image_src", "model_url"]
+    attribute_cols = ["brand_name", "model_name", "image_src"]
     attr_df = new_msrp.loc[mask, attribute_cols].reset_index(drop=True)
-
-    # pivot to brand model to get previous and current prices
     new_msrp_pivot = (
         pd.pivot_table(data=new_msrp, index=["brand_name", "model_name"], columns="rank", values="msrp", aggfunc="sum")
         .reset_index()
@@ -133,8 +130,23 @@ def run_ev_price_cache(event, context):
     # for every brand model, update graph data json
     brand_model_list = new_msrp[["brand_name", "model_name"]].drop_duplicates().to_numpy().tolist()
     for brand_name, model_name in brand_model_list:
+        max_min_query = read_sql_file(
+            query_file_path="sql/get_max_min_data.sql",
+            params={"DB_PRICE_TABLE": DB_PRICE_TABLE, "brand_name": brand_name, "model_name": model_name},
+        )
+        cursor.execute(max_min_query)
+        max_min_data = cursor.fetchall()
+        car_type, model_url, min_msrp, max_msrp = max_min_data
+        graph_dict = {
+            "brandName": brand_name,  # add brand name
+            "modelName": model_name,  # add model name
+            "carType": car_type,  # add car type
+            "modelUrl": model_url,  # add model url
+            "minPrice": min_msrp,  # add min price
+            "maxPrice": max_msrp,  # add model name
+        }
         graph_query = read_sql_file(
-            query_file_path="sql/get_last_year_model_data.sql",
+            query_file_path="sql/get_ytd_graph_data.sql",
             params={"DB_PRICE_TABLE": DB_PRICE_TABLE, "brand_name": brand_name, "model_name": model_name},
         )
         cursor.execute(graph_query)
@@ -142,6 +154,9 @@ def run_ev_price_cache(event, context):
         graph_data = pd.DataFrame(graph_data, columns=["msrp", "create_timestamp"])
         graph_data["create_timestamp"] = pd.to_datetime(graph_data["create_timestamp"]).dt.date
         graph_data = graph_data.sort_values(by="create_timestamp", ascending=False)
+        graph_dict["curPrice"] = graph_data["msrp"].iloc[0]  # add current price
+        graph_dict["maxPriceYTD"] = graph_data["msrp"].max()  # add max price YTD
+        graph_dict["minPriceYTD"] = graph_data["msrp"].min()  # add min price YTD
 
         # fill in current and last year data points
         max_id = graph_data["create_timestamp"].idxmax()
@@ -168,14 +183,15 @@ def run_ev_price_cache(event, context):
                     row["last_msrp"],
                     row["create_timestamp"] - relativedelta(days=1),
                 ]
-
-        # create graph data json and store in redis
         graph_data["create_timestamp"] = pd.to_datetime(graph_data["create_timestamp"]).dt.strftime("%Y-%m-%d")
         graph_data = graph_data.sort_values(by=["create_timestamp"], ascending=[True]).rename(
             columns={"create_timestamp": "x", "msrp": "y"}
         )
         graph_data = graph_data[["x", "y"]]
-        model_data_json = json.dumps(graph_data.to_dict("records"))
+        graph_dict = {"graphData": graph_data.to_dict("records")}  # add graph data
+
+        # create graph data json and store in redis
+        model_data_json = json.dumps(graph_dict)
         cache.set(f"{KEY_PREFIX}graph_{brand_name}_{model_name.replace(' ', '_')}", model_data_json)
 
     cursor.close()
