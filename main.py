@@ -98,7 +98,9 @@ def run_ev_price_cache(event, context):
         .fillna("none")
     )
     new_msrp_pivot = new_msrp_pivot.rename(columns={1: "current_price", 2: "previous_price"})
-    attr_df = attr_df.merge(new_msrp_pivot, on=["brand_name", "model_name"], how="left")
+    attr_df = attr_df.merge(new_msrp_pivot, on=["brand_name", "model_name"], how="left").sort_values(
+        by=["brand_name", "current_price"], ascending=[False, False]
+    )
 
     # update column names from snake case to camel case
     new_col = []
